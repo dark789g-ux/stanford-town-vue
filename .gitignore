@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.so
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+.vite/
+dist/
+.parcel-cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code runtime
+.claude/scheduled_tasks.lock
+
+# Local sim run outputs (base_the_ville_* are seed fixtures and ARE tracked)
+storage/keep_alive_test/
+storage/lunch_party_demo/
+storage/lunch_party_demo_v2/
+storage/test001/
+storage/test002/
+storage/test003/
+storage/test004/
+
+# App
+data/
+logs/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+secret.key
+.env
+.env.local
+# simulator runtime working dir (STORAGE_PATH / TEMP_STORAGE_PATH)
+backend/storage/stanford_town/
+
+# The MetaGPT repo root .gitignore excludes *.png, but the bundled maze +
+# character assets ARE part of this standalone project and must be tracked.
+# (This negation is scoped to backend/assets so stray *.png elsewhere stay
+# ignored.)
+!backend/assets/**/*.png
+
+# Frontend
+frontend/dist/
+frontend/.vite/

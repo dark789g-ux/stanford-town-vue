@@ -48,15 +48,29 @@
 
 ## 编排行为
 
+### 启动前预检（fail-fast）
+
+启动任何进程前先校验环境，缺失则打印明确提示并以退出码 1 退出：
+
+- `uvicorn` 是否在 PATH 上（用 `where` / `which` 解析其真实路径）。
+- `frontend/node_modules/vite/bin/vite.js` 是否存在（缺失说明前端依赖未装，
+  提示先在 `frontend` 目录运行 `pnpm install`）。
+
 ### 启动流程
 
-1. 用 `child_process.spawn` 启动后端：工作目录 `backend/`，命令
-   `uvicorn app.main:app`（**不带 `--reload`**——后端代码变动不热重载，
-   需手动重启 `pnpm run dev` 或单独重启后端才生效）。
+1. 用 `child_process.spawn` 启动后端：工作目录 `backend/`，**直接调用预检解析到的
+   `uvicorn` 可执行文件**（参数 `app.main:app`，**不带 `--reload`**——后端代码变动
+   不热重载，需手动重启 `pnpm run dev` 或单独重启后端才生效）。
 2. 轮询 `http://localhost:8000/api/health`，间隔 1s，最多等 **60s**
    （覆盖 alembic 迁移 + vendored 仿真器加载的冷启动耗时）。
-3. 健康检查通过 → 启动前端：工作目录 `frontend/`，命令 `pnpm dev`。
+3. 健康检查通过 → 启动前端：工作目录 `frontend/`，用 `node` 直接运行
+   `node_modules/vite/bin/vite.js`（等价于 `frontend` 的 `pnpm dev`，即 `vite`）。
 4. 60s 内仍未就绪 → 打印错误，终止后端进程，整体以退出码 1 退出。
+
+**为何不经 `shell: true` / `pnpm`：** 直接 spawn 真实可执行文件后，`child.pid`
+就是真实进程（`uvicorn.exe`、运行 vite 的 `node`），`taskkill /T` 才能可靠地清掉
+整棵子树。若经 `cmd.exe`/`pnpm` 包一层，`child.pid` 是包装进程，`taskkill /T` 在
+`cmd → uvicorn.exe → python` 这类多级链上会漏杀子树、残留孤儿进程。
 
 ### 输出
 
@@ -66,13 +80,15 @@
 
 ### 退出与信号处理（Windows 重点）
 
-- 监听 `SIGINT`（Ctrl+C）→ 终止两个子进程后退出。Windows 下 `spawn` 出的
-  `uvicorn` / `pnpm` 会再派生子进程，用 `taskkill /pid <pid> /T /F` 确保整棵
-  进程树被清理，不残留占用 `:8000` / `:5173` 的孤儿进程。
+- 监听 `SIGINT`（Ctrl+C）→ 终止两个子进程后退出。子进程会再派生孙进程
+  （`uvicorn.exe → python`、`vite` 的 `node → esbuild`），用
+  `taskkill /pid <pid> /T /F` 对真实进程 pid 清理整棵进程树，不残留占用
+  `:8000` / `:5173` 的孤儿进程。`taskkill` 用 `spawnSync` 同步执行，确保清理
+  在 `process.exit()` 之前完成，无竞态。
 - 任一子进程意外退出（非 Ctrl+C 触发）→ 终止另一个子进程，编排脚本以该子
   进程的退出码退出。
-- 若 `uvicorn` 不在 PATH，`spawn` 抛 `ENOENT`，脚本捕获后给出明确提示
-  （提示开发者全局安装后端依赖，或参见 README 的后端安装一节）。
+- 启动前的预检（见上）已覆盖 `uvicorn` / 前端依赖缺失的场景；进程启动后若再
+  抛 `error` 事件，脚本捕获并打印后整体退出。
 
 ## 前置假设（脚本不负责的事）
 

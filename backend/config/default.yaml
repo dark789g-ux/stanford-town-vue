@@ -1,0 +1,22 @@
+# stanford-town-vue default configuration
+#
+# This file documents the human-readable defaults. Real configuration is
+# loaded by `config/settings.py` via pydantic-settings (env vars / .env).
+# Edit values here for reference; runtime overrides go in environment.
+
+database:
+  url: "sqlite:///./data/stanford_town.db"
+
+paths:
+  secret_key: "~/.stanford-town-vue/secret.key"
+  logs_dir: "~/.stanford-town-vue/logs"
+  assets_dir: "./backend/assets"
+
+frontend:
+  dev_origin: "http://localhost:5173"
+
+# Placeholders for later milestones — populated in M2/M3.
+llm_profiles: {}
+simulator:
+  default_persona_count: 3
+  default_steps_per_call: 1

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat examples/stanford_town/requirements.txt; echo \"---config:---\"; ls ~/.metagpt/ 2>&1)",
+      "Bash(python -c *)",
+      "Bash(python -m *)",
+      "Bash(mkdir -p ~/.metagpt)",
+      "Bash(cp config/config2.example.yaml ~/.metagpt/config2.yaml)",
+      "Bash(git clone *)",
+      "Bash(pip install *)",
+      "Bash(py -0p)",
+      "Bash(Get-ChildItem -Path *)",
+      "Bash(xargs -I {} python -c *)"
+    ]
+  }
+}
