@@ -54,6 +54,7 @@ class MemoryRepo:
         fields.setdefault("predicate", "")
         fields.setdefault("object", "")
         fields.setdefault("description", "")
+        fields.setdefault("embedding_key", "")
         fields.setdefault("poignancy", 0)
         fields.setdefault("keywords_json", [])
 

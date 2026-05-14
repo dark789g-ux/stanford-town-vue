@@ -164,7 +164,10 @@ class AgentMemory(Memory):
             o = node_details["object"]
 
             description = node_details["description"]
-            embedding_pair = (node_details["embedding_key"], self.embeddings[node_details["embedding_key"]])
+            embedding_key = node_details["embedding_key"]
+            # embeddings.json may omit the key (forks exported without real
+            # embeddings); fall back to a placeholder vector instead of raising.
+            embedding_pair = (embedding_key, self.embeddings.get(embedding_key, [0.0]))
             poignancy = node_details["poignancy"]
             keywords = set(node_details["keywords"])
             filling = node_details["filling"]

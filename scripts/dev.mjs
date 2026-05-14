@@ -2,6 +2,7 @@
 // 设计见 docs/superpowers/specs/2026-05-14-root-pnpm-dev-orchestration-design.md
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import net from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
@@ -12,6 +13,7 @@ const FRONTEND_DIR = join(ROOT, "frontend");
 const VITE_BIN = join(FRONTEND_DIR, "node_modules", "vite", "bin", "vite.js");
 
 const HEALTH_URL = "http://localhost:8000/api/health";
+const HEALTH_PORT = Number(new URL(HEALTH_URL).port || 80);
 const HEALTH_INTERVAL_MS = 1000;
 const HEALTH_TIMEOUT_MS = 60_000;
 
@@ -107,6 +109,17 @@ async function waitForBackend() {
 }
 
 // --- 主流程 -------------------------------------------------------
+// 启动前探测端口：8000 被占时 uvicorn 会「先跑 lifespan startup，再 bind 失败」，
+// 然后立刻 shutdown 并以 code=1 退出——报错很隐蔽。提前检测可给出可操作的提示。
+function checkPortFree(port) {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    tester.once("error", (err) => resolve(err.code !== "EADDRINUSE"));
+    tester.once("listening", () => tester.close(() => resolve(true)));
+    tester.listen(port, "127.0.0.1");
+  });
+}
+
 function resolveExecutable(name) {
   const finder = isWindows ? "where" : "which";
   const res = spawnSync(finder, [name], { encoding: "utf8" });
@@ -122,6 +135,18 @@ async function main() {
   }
   if (!existsSync(VITE_BIN)) {
     log("dev", `找不到前端依赖（缺 ${VITE_BIN}）：请先在 frontend 目录运行 pnpm install。`);
+    process.exit(1);
+  }
+
+  if (!(await checkPortFree(HEALTH_PORT))) {
+    log("dev", `端口 ${HEALTH_PORT} 已被占用——多半是上一次没正常关闭（直接关终端而非 Ctrl+C）残留的后端进程。`);
+    log("dev", "请先释放该端口再重试：");
+    if (isWindows) {
+      log("dev", `  Get-Process -Id (Get-NetTCPConnection -LocalPort ${HEALTH_PORT} -State Listen).OwningProcess`);
+      log("dev", "  taskkill /pid <PID> /T /F");
+    } else {
+      log("dev", `  lsof -i :${HEALTH_PORT}    然后  kill <PID>`);
+    }
     process.exit(1);
   }
 

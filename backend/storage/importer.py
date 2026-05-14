@@ -322,6 +322,7 @@ def _node_to_row(
         "predicate": node.predicate,
         "object": node.object,
         "description": node.description,
+        "embedding_key": node.embedding_key,
         "poignancy": node.poignancy,
         "keywords_json": list(node.keywords),
         "filling_json": filling,

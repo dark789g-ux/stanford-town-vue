@@ -142,10 +142,9 @@ def _build_node_record(
 ) -> dict[str, Any]:
     """Render one ``MemoryNode`` row as an on-disk node dict.
 
-    ``embedding_key`` is emitted as an empty string — this fork drops embedding
-    storage entirely (see docs/json_format.md §embeddings.json). Downstream
-    consumers that don't index ``embeddings.json`` ignore the value; importers
-    that re-read this file simply set the in-memory key to "" as well.
+    ``embedding_key`` carries the node's canonical text — the simulator's
+    ``AgentMemory.load()`` looks it up in ``embeddings.json`` (see
+    :func:`_build_embeddings_file`), so it must round-trip verbatim.
     """
     return {
         "node_count": int(node.node_count),
@@ -158,14 +157,24 @@ def _build_node_record(
         "predicate": node.predicate,
         "object": node.object,
         "description": node.description,
-        # No embeddings are persisted; the on-disk schema requires the key to
-        # exist as a string. Empty string is safe — it never matches an entry
-        # in the (empty) embeddings.json we emit.
-        "embedding_key": "",
+        "embedding_key": node.embedding_key or "",
         "poignancy": int(node.poignancy),
         "keywords": list(node.keywords_json or []),
         "filling": node.filling_json,
     }
+
+
+def _build_embeddings_file(nodes: list) -> dict[str, list[float]]:
+    """Build ``embeddings.json`` as ``{embedding_key: vector}``.
+
+    This fork does not persist real embedding vectors, but the simulator's
+    ``AgentMemory.load()`` indexes ``embeddings.json`` by every node's
+    ``embedding_key`` — a missing key raises ``KeyError``. We emit the same
+    placeholder a real (embedding-disabled) run writes: a ``[0.0]`` vector per
+    distinct key. Nodes with an empty ``embedding_key`` (rows that predate the
+    column) still get a ``""`` entry so the loader stays crash-free.
+    """
+    return {(n.embedding_key or ""): [0.0] for n in nodes}
 
 
 def _build_nodes_file(
@@ -346,9 +355,10 @@ def export_simulation(
         kw_strength = _build_kw_strength(repos.memory, persona.id)
         _dump_json(am_dir / "kw_strength.json", kw_strength)
 
-        # Per the spec we never persist embeddings; an empty placeholder keeps
-        # downstream tools that expect the file present from crashing.
-        _dump_json(am_dir / "embeddings.json", {})
+        # embeddings.json must contain an entry for every node's embedding_key
+        # or the simulator's AgentMemory.load() raises KeyError. We emit
+        # placeholder [0.0] vectors rather than real embeddings.
+        _dump_json(am_dir / "embeddings.json", _build_embeddings_file(nodes))
 
         if log_progress:
             print(

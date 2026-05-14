@@ -134,6 +134,7 @@ def _seed_full_sim(session: Session) -> int:
         predicate="be",
         object="idle",
         description="counter is idle",
+        embedding_key="counter is idle",
         poignancy=1,
         keywords_json=["counter", "idle"],
         filling_json=[],
@@ -151,6 +152,7 @@ def _seed_full_sim(session: Session) -> int:
         predicate="plan",
         object="day",
         description="plan for the day",
+        embedding_key="This is Isabella Rodriguez's plan for the day.",
         poignancy=5,
         keywords_json=["plan"],
         filling_json=["node_1"],
@@ -300,8 +302,14 @@ def test_export_compressed_layout(session: Session, tmp_path: Path) -> None:
             (pdir / "spatial_memory.json").read_text(encoding="utf-8")
         )
         assert "the Ville" in spatial
-        # embeddings.json is the empty placeholder.
-        assert json.loads((am / "embeddings.json").read_text(encoding="utf-8")) == {}
+        # embeddings.json must contain an entry for every node's embedding_key
+        # — AgentMemory.load() indexes it directly and raises KeyError on a
+        # miss. Values are placeholder [0.0] vectors (this fork has no real
+        # embeddings); the invariant under test is key coverage.
+        embeddings = json.loads((am / "embeddings.json").read_text(encoding="utf-8"))
+        node_records = json.loads((am / "nodes.json").read_text(encoding="utf-8"))
+        for rec in node_records.values():
+            assert rec["embedding_key"] in embeddings
 
     # Memory + kw_strength for Isabella.
     isa_dir = out / "personas" / "Isabella Rodriguez" / "bootstrap_memory" / "associative_memory"
@@ -318,8 +326,11 @@ def test_export_compressed_layout(session: Session, tmp_path: Path) -> None:
     assert nodes["node_2"].created == "2023-02-13 00:00:10"
     # expiration_step=100 → 100 * 10s = 1000s after start = +16min40s.
     assert nodes["node_2"].expiration == "2023-02-13 00:16:40"
-    # embedding_key is the empty-string placeholder.
-    assert nodes["node_1"].embedding_key == ""
+    # embedding_key round-trips verbatim from the DB column.
+    assert nodes["node_1"].embedding_key == "counter is idle"
+    assert nodes["node_2"].embedding_key == (
+        "This is Isabella Rodriguez's plan for the day."
+    )
 
     kw_strength = json.loads(
         (isa_dir / "kw_strength.json").read_text(encoding="utf-8")
@@ -412,6 +423,34 @@ def test_export_invalid_layout_raises(session: Session, tmp_path: Path) -> None:
     sim_id = _seed_full_sim(session)
     with pytest.raises(ValueError):
         export_simulation(sim_id, tmp_path, session, layout="weird")  # type: ignore[arg-type]
+
+
+def test_exported_memory_loads_in_simulator(
+    session: Session, tmp_path: Path
+) -> None:
+    """Regression: exporter output must be loadable by the vendored simulator.
+
+    Before ``memory_nodes`` had an ``embedding_key`` column, the exporter wrote
+    every node's ``embedding_key`` as ``""`` and ``embeddings.json`` as ``{}``.
+    The simulator's ``AgentMemory.load()`` then did ``self.embeddings[""]`` →
+    ``KeyError: ''``, crashing every fork descended from a DB-only simulation.
+    """
+    from simulator.memory.agent_memory import AgentMemory
+
+    sim_id = _seed_full_sim(session)
+    out = export_simulation(sim_id, tmp_path, session, layout="live")
+    am_dir = (
+        out / "personas" / "Isabella Rodriguez"
+        / "bootstrap_memory" / "associative_memory"
+    )
+
+    mem = AgentMemory()
+    mem.set_mem_path(am_dir)  # must not raise KeyError
+
+    # Both seeded nodes load with their embedding_key text intact.
+    loaded_keys = {n.embedding_key for n in mem.storage}
+    assert "counter is idle" in loaded_keys
+    assert "This is Isabella Rodriguez's plan for the day." in loaded_keys
 
 
 # ---------------------------------------------------------------------------

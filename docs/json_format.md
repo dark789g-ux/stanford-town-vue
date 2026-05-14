@@ -379,10 +379,13 @@ Flat dict mapping `embedding_key` (the same string stored on each node) to a
 fixed-dimensional embedding vector (1536 floats for OpenAI `text-embedding-ada-002`,
 likely different for other models). Pristine bootstrap: `{}`.
 
-> **NOTE — stanford-town-vue does not persist embeddings.** Per the M2 spec,
-> the importer **skips this file** and the exporter writes an empty `{}` (or
-> regenerates lazily on demand). This section documents the original format for
-> compatibility / forensic reading of legacy sims only.
+> **NOTE — stanford-town-vue does not persist real embedding vectors.** The
+> importer skips the vectors in this file, but it **does** persist each node's
+> `embedding_key` (the canonical memory text) in the `memory_nodes` table — the
+> simulator's `AgentMemory.load()` indexes `embeddings.json` by that key and
+> raises `KeyError` on a miss. The exporter therefore rebuilds `embeddings.json`
+> as `{embedding_key: [0.0]}` (placeholder vectors, one entry per node) rather
+> than writing an empty `{}`. Real embedding vectors are still never stored.
 
 ---
 

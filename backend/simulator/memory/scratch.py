@@ -76,6 +76,15 @@ class Scratch(BaseModel):
     act_path_set: bool = False
     planned_path: list[list[int]] = Field(default=[])
 
+    def __setattr__(self, name, value):
+        if name == "curr_tile" and isinstance(value, tuple):
+            value = list(value)
+        elif name == "planned_path" and isinstance(value, list):
+            value = [list(item) if isinstance(item, tuple) else item for item in value]
+        elif name in ("act_event", "act_obj_event") and isinstance(value, tuple):
+            value = list(value)
+        super().__setattr__(name, value)
+
     @field_validator("curr_time", "act_start_time", "chatting_end_time", mode="before")
     @classmethod
     def check_time_filed(cls, time_filed):

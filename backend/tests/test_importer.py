@@ -290,6 +290,10 @@ def test_imports_compressed_demo(session, compressed_demo_dir: Path):
     assert by_id["node_2"].created == 6 * 3600 // 10  # 2160
     assert by_id["node_1"].expiration_step is not None
     assert by_id["node_2"].expiration_step is None
+    # embedding_key (the node's canonical prompt text) must survive the import,
+    # not be silently dropped — it is what AgentMemory.load() indexes on.
+    assert by_id["node_1"].embedding_key == "This is Isabella's plan for the day."
+    assert by_id["node_2"].embedding_key == "Isabella Rodriguez wakes up"
 
     # Step movements -------------------------------------------------------
     moves = session.scalars(select(StepMovement).where(StepMovement.sim_id == sim_id)).all()

@@ -200,6 +200,13 @@ class MemoryNode(Base):
     predicate: Mapped[str] = mapped_column(String(255), nullable=False)
     object: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    # Canonical natural-language text of the node — what the simulator feeds
+    # into prompts and keys ``embeddings.json`` by. The on-disk format keeps it
+    # separate from ``description`` (empty for bootstrap-style nodes), so it
+    # gets its own column rather than being conflated with ``description``.
+    embedding_key: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="", default=""
+    )
     poignancy: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     keywords_json: Mapped[list] = mapped_column(JSON, nullable=False)
     filling_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
