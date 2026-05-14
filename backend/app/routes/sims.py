@@ -104,6 +104,8 @@ class PersonaStateOut(BaseModel):
     scratch: dict | None
     spatial_memory: dict | None
     recent_memory: list[MemoryNodeOut]
+    step: int
+    curr_time_iso: str | None
 
 
 class StepMovementOut(BaseModel):
@@ -427,7 +429,7 @@ def persona_state(
     k: int = Query(default=20, ge=1, le=500),
     repos: Repos = Depends(get_repos),
 ) -> PersonaStateOut:
-    _require_sim(repos, sim_id)
+    sim = _require_sim(repos, sim_id)
     persona = repos.personas.get(sim_id, name)
     if persona is None:
         raise HTTPException(
@@ -444,6 +446,8 @@ def persona_state(
         scratch=scratch,
         spatial_memory=spatial,
         recent_memory=[MemoryNodeOut.model_validate(n) for n in recent_nodes],
+        step=sim.step,
+        curr_time_iso=sim.curr_time_iso,
     )
 
 

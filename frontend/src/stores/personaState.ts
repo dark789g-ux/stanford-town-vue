@@ -28,6 +28,8 @@ export interface PersonaStateOut {
   scratch: Record<string, unknown> | null
   spatial_memory: Record<string, unknown> | null
   recent_memory: MemoryNode[]
+  step: number
+  curr_time_iso: string | null
 }
 
 export interface MemoryListOut {
@@ -49,6 +51,8 @@ interface PersonaStateState {
   scratch: Record<string, unknown> | null
   spatialMemory: Record<string, unknown> | null
   recentMemory: MemoryNode[]
+  step: number
+  currTimeIso: string | null
   memory: MemoryNode[]
   memoryTotal: number
   type: string | null
@@ -72,6 +76,8 @@ export const usePersonaStateStore = defineStore('personaState', {
     scratch: null,
     spatialMemory: null,
     recentMemory: [],
+    step: 0,
+    currTimeIso: null,
     memory: [],
     memoryTotal: 0,
     type: null,
@@ -97,6 +103,8 @@ export const usePersonaStateStore = defineStore('personaState', {
         this.scratch = data.scratch
         this.spatialMemory = data.spatial_memory
         this.recentMemory = data.recent_memory ?? []
+        this.step = data.step
+        this.currTimeIso = data.curr_time_iso
       } catch (e) {
         this.error = errMessage(e)
       } finally {
@@ -139,6 +147,8 @@ export const usePersonaStateStore = defineStore('personaState', {
       this.scratch = null
       this.spatialMemory = null
       this.recentMemory = []
+      this.step = 0
+      this.currTimeIso = null
       this.memory = []
       this.memoryTotal = 0
       this.type = null

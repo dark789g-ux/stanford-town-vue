@@ -1,17 +1,22 @@
 <script setup lang="ts">
 // PersonaStateView - shows scratch, spatial memory, and the memory stream for a persona.
 import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { usePersonaStateStore, type MemoryNode } from '@/stores/personaState'
 
 const props = defineProps<{ id: string | number; name: string }>()
 
+const route = useRoute()
+
 const store = usePersonaStateStore()
 const {
   persona,
   scratch,
   spatialMemory,
+  step,
+  currTimeIso,
   memory,
   memoryTotal,
   type,
@@ -22,6 +27,12 @@ const {
 } = storeToRefs(store)
 
 const simId = computed(() => Number(props.id))
+
+// Replay step the user came from when arriving via an AgentCard "Details" link.
+const fromStep = computed(() => {
+  const q = route.query.from_step
+  return typeof q === 'string' ? q : null
+})
 
 onMounted(async () => {
   await store.load(simId.value, props.name)
@@ -115,6 +126,17 @@ function onTypeChange(value: string): void {
       <a-typography-title :level="2" style="margin: 0">
         {{ persona?.name ?? props.name }}
       </a-typography-title>
+      <a-space>
+        <a-tag color="blue">
+          <template v-if="currTimeIso">
+            Step {{ step }} · {{ currTimeIso }}
+          </template>
+          <template v-else> Step {{ step }} </template>
+        </a-tag>
+        <a-tag v-if="fromStep" color="default">
+          从回放 Step {{ fromStep }} 跳转而来
+        </a-tag>
+      </a-space>
       <router-link
         :to="{ name: 'sim-replay', params: { id: String(props.id) } }"
       >

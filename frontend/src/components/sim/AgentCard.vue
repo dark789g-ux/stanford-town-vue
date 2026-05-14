@@ -2,6 +2,7 @@
 // AgentCard - one persona's current state; clicking focuses the camera.
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useSimSessionStore } from '@/stores/simSession'
 import type { AgentFrame } from '@/types/viewer'
 
 const props = defineProps<{
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 
 const route = useRoute()
 const router = useRouter()
+const session = useSimSessionStore()
 
 const simId = computed(() => String(route.params.id ?? ''))
 
@@ -24,7 +26,8 @@ function onClick(): void {
 
 function openDetails(): void {
   void router.push(
-    `/sims/${simId.value}/personas/${encodeURIComponent(props.agent.name)}`,
+    `/sims/${simId.value}/personas/${encodeURIComponent(props.agent.name)}` +
+      `?from_step=${session.currentStep}`,
   )
 }
 </script>

@@ -331,6 +331,9 @@ def test_persona_state(client, repos):
     assert body["spatial_memory"] == {"Ville": {"Cafe": {}}}
     assert len(body["recent_memory"]) == 1
     assert body["recent_memory"][0]["keywords"] == ["coffee"]
+    # Step info reflects the owning simulation row.
+    assert body["step"] == sim.step
+    assert body["curr_time_iso"] == sim.curr_time_iso == "2025-01-01T07:00:00"
 
 
 def test_persona_state_missing_persona_404(client, repos):
