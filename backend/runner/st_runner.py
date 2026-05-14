@@ -389,6 +389,20 @@ async def stanford_town_runner(ctx: RunContext) -> None:
         sec_per_step=sec_per_step,
     )
 
+    # Import the persona subtree (bootstrap memory) into the DB up front, so the
+    # personas stay queryable even if the run is interrupted or fails before
+    # _persist_final_state runs. The end-of-run sync refreshes them with each
+    # role's final memory state. Best-effort: a failure here must not abort the
+    # run.
+    try:
+        _sync_personas_to_db(ctx, work_dir)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "stanford_town_runner: initial persona sync failed for {}: {}",
+            sim_code,
+            exc,
+        )
+
     # Resolve the LLM context from the simulation's chosen profile (if any).
     # Falls back to ambient `core` config when no profile is attached.
     sim_context = None
@@ -462,15 +476,76 @@ async def stanford_town_runner(ctx: RunContext) -> None:
     logger.info("stanford_town_runner: sim_id={} loop finished", ctx.sim_id)
 
 
-def _persist_final_state(ctx: RunContext, sim_code: str, work_dir: Path, roles) -> None:
-    """Save role memory to disk, then sync the persona subtree into the DB.
+def _sync_personas_to_db(ctx: RunContext, work_dir: Path) -> None:
+    """Re-import the persona subtree from ``work_dir`` into the DB for this sim.
 
-    We reuse the importer's per-persona helper (``_import_personas``) rather
-    than ``import_simulation`` — the latter would hard-delete and recreate the
-    ``simulations`` row (new id), breaking the manager's ``ctx.sim_id`` handle
-    and clobbering the live status / step counter. Here we keep the existing
-    row and only refresh personas + their memory, scoped to ``ctx.sim_id``.
+    Drops any prior persona rows for ``ctx.sim_id`` (plus their memory), then
+    re-imports them via the importer's per-persona helper. We reuse
+    ``_import_personas`` rather than ``import_simulation`` — the latter would
+    hard-delete and recreate the ``simulations`` row (new id), breaking the
+    manager's ``ctx.sim_id`` handle and clobbering the live status / step
+    counter. Here we keep the existing row and only refresh personas + their
+    memory, scoped to ``ctx.sim_id``.
+
+    Called twice per run: once up front (from bootstrap memory, so personas are
+    queryable even if the run is interrupted before completion) and once at the
+    end (to refresh them with each role's final memory state).
     """
+    from sqlalchemy import delete, select
+
+    from storage.importer import _import_personas
+    from storage.models import (
+        MemoryKeywordsToChat,
+        MemoryKeywordsToEvent,
+        MemoryKeywordsToThought,
+        MemoryNode,
+        Persona,
+        SpatialMemoryTree,
+    )
+
+    with ctx.session_factory() as session:
+        repos = make_repos(session)
+        sim = repos.simulations.get_by_id(ctx.sim_id)
+        if sim is None:
+            return
+        # Drop any prior persona rows for this sim so the refresh is clean.
+        persona_ids = list(
+            session.scalars(
+                select(Persona.id).where(Persona.sim_id == ctx.sim_id)
+            ).all()
+        )
+        if persona_ids:
+            for tbl in (
+                MemoryKeywordsToEvent,
+                MemoryKeywordsToChat,
+                MemoryKeywordsToThought,
+                MemoryNode,
+                SpatialMemoryTree,
+            ):
+                session.execute(
+                    delete(tbl).where(tbl.persona_id.in_(persona_ids))
+                )
+            session.execute(delete(Persona).where(Persona.id.in_(persona_ids)))
+            session.commit()
+
+        try:
+            start_dt = datetime.fromisoformat(
+                sim.start_time_iso.replace("T", " ")
+            )
+        except ValueError:
+            start_dt = datetime.utcnow()
+        _import_personas(
+            repos,
+            ctx.sim_id,
+            work_dir,
+            start_dt,
+            sim.sec_per_step or 10,
+            log_progress=False,
+        )
+
+
+def _persist_final_state(ctx: RunContext, sim_code: str, work_dir: Path, roles) -> None:
+    """Save role memory to disk, then sync the persona subtree into the DB."""
     for role in roles:
         try:
             role.save_into()
@@ -478,56 +553,7 @@ def _persist_final_state(ctx: RunContext, sim_code: str, work_dir: Path, roles) 
             logger.warning("save_into failed for {}: {}", role.name, exc)
 
     try:
-        from storage.importer import _import_personas
-        from storage.models import (
-            MemoryKeywordsToChat,
-            MemoryKeywordsToEvent,
-            MemoryKeywordsToThought,
-            MemoryNode,
-            Persona,
-            SpatialMemoryTree,
-        )
-        from sqlalchemy import delete, select
-
-        with ctx.session_factory() as session:
-            repos = make_repos(session)
-            sim = repos.simulations.get_by_id(ctx.sim_id)
-            if sim is None:
-                return
-            # Drop any prior persona rows for this sim so the refresh is clean.
-            persona_ids = list(
-                session.scalars(
-                    select(Persona.id).where(Persona.sim_id == ctx.sim_id)
-                ).all()
-            )
-            if persona_ids:
-                for tbl in (
-                    MemoryKeywordsToEvent,
-                    MemoryKeywordsToChat,
-                    MemoryKeywordsToThought,
-                    MemoryNode,
-                    SpatialMemoryTree,
-                ):
-                    session.execute(
-                        delete(tbl).where(tbl.persona_id.in_(persona_ids))
-                    )
-                session.execute(delete(Persona).where(Persona.id.in_(persona_ids)))
-                session.commit()
-
-            try:
-                start_dt = datetime.fromisoformat(
-                    sim.start_time_iso.replace("T", " ")
-                )
-            except ValueError:
-                start_dt = datetime.utcnow()
-            _import_personas(
-                repos,
-                ctx.sim_id,
-                work_dir,
-                start_dt,
-                sim.sec_per_step or 10,
-                log_progress=False,
-            )
+        _sync_personas_to_db(ctx, work_dir)
     except Exception as exc:  # noqa: BLE001
         logger.warning("final-state persona sync failed for {}: {}", sim_code, exc)
 
