@@ -39,7 +39,7 @@ from loguru import logger
 from config.settings import get_settings
 from runner.llm_config import load_profile_context
 from runner.manager import RunContext
-from runner.step_sync import sync_step_to_db
+from runner.step_sync import sync_personas_step, sync_step_to_db
 from storage.repos import make_repos
 
 # ---------------------------------------------------------------------------
@@ -461,6 +461,14 @@ async def stanford_town_runner(ctx: RunContext) -> None:
         movement_rows = sync_step_to_db(
             ctx.session_factory, ctx.sim_id, step, work_dir
         )
+        # Incrementally sync each live role's persona state (memory / scratch /
+        # spatial). Best-effort: a failure here must never abort the run.
+        try:
+            sync_personas_step(
+                ctx.session_factory, ctx.sim_id, roles, start_dt, sec_per_step
+            )
+        except Exception as exc:  # noqa: BLE001 — best-effort, never abort the run
+            logger.warning("sync_personas_step failed at step {}: {}", step, exc)
         curr_dt = start_dt + timedelta(seconds=sec_per_step * (step + 1))
         curr_time_iso = curr_dt.isoformat(timespec="seconds")
         with ctx.session_factory() as session:
